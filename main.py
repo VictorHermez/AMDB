@@ -3,11 +3,11 @@ from discord import app_commands
 from discord.ext import commands
 import json
 import os
-from dotenv import load_dotenv  # ✅ Added to load .env variables
+from dotenv import load_dotenv
 
-load_dotenv()  # ✅ Initialize dotenv to load the .env file
-
-TOKEN = os.getenv("TOKEN")  # ✅ Load the TOKEN from the .env file
+# Load environment variables
+load_dotenv()
+TOKEN = os.getenv("TOKEN")
 
 # Bot setup with intents
 intents = discord.Intents.default()
@@ -36,7 +36,7 @@ async def update_user_embed(channel, user_id, current_name, past_names, message_
     embed.add_field(name="User ID", value=user_id, inline=False)
     embed.add_field(name="Current Name", value=current_name, inline=False)
     embed.add_field(name="Past Names", value=", ".join(past_names) if past_names else "None", inline=False)
-    
+
     if message_id:
         try:
             msg = await channel.fetch_message(message_id)
@@ -44,17 +44,27 @@ async def update_user_embed(channel, user_id, current_name, past_names, message_
             return message_id
         except discord.NotFound:
             pass
-    
+
     msg = await channel.send(embed=embed)
     return msg.id
 
-# On bot startup
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
     print("Bot is ready.")
+    try:
+        synced = await bot.tree.sync()
+        print(f"Synced {len(synced)} command(s).")
+    except Exception as e:
+        print(f"Failed to sync commands: {e}")
 
-# (Continue the rest of your code here...)
+@bot.tree.command(name="setnamechange", description="Set the channel for name change updates.")
+@app_commands.checks.has_permissions(administrator=True)
+async def setnamechange(interaction: discord.Interaction, channel: discord.TextChannel):
+    data = load_data()
+    data["channel_id"] = channel.id
+    save_data(data)
+    await interaction.response.send_message(f"Name change updates will be sent in {channel.mention}.", ephemeral=True)
 
 # ✅ Run the bot with the loaded token
 bot.run(TOKEN)
