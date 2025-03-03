@@ -116,3 +116,4 @@ async def check_name_changes(interaction: discord.Interaction, member: discord.M
 # Start the bot and load previous names data
 load_previous_names()
 bot.run(TOKEN)
+ 
