@@ -16,7 +16,6 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 # File to store user data and channel info
 DATA_FILE = "bot_data.json"
-CHANNEL_ID = None
 
 # Load or initialize data
 def load_data():
@@ -65,6 +64,33 @@ async def setnamechange(interaction: discord.Interaction, channel: discord.TextC
     data["channel_id"] = channel.id
     save_data(data)
     await interaction.response.send_message(f"Name change updates will be sent in {channel.mention}.", ephemeral=True)
+
+# ✅ Detect name changes
+@bot.event
+async def on_member_update(before: discord.Member, after: discord.Member):
+    if before.display_name != after.display_name:
+        data = load_data()
+        user_id = str(after.id)
+        user_data = data["users"].get(user_id, {"past_names": [], "message_id": None})
+
+        if before.display_name not in user_data["past_names"]:
+            user_data["past_names"].append(before.display_name)
+
+        user_data["current_name"] = after.display_name
+        data["users"][user_id] = user_data
+        save_data(data)
+
+        channel_id = data.get("channel_id")
+        if channel_id:
+            channel = bot.get_channel(channel_id)
+            if channel:
+                message_id = user_data.get("message_id")
+                new_message_id = await update_user_embed(
+                    channel, user_id, after.display_name, user_data["past_names"], message_id
+                )
+                user_data["message_id"] = new_message_id
+                data["users"][user_id] = user_data
+                save_data(data)
 
 # ✅ Run the bot with the loaded token
 bot.run(TOKEN)
