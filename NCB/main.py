@@ -4,9 +4,10 @@ from discord import app_commands
 import os
 import mysql.connector
 from dotenv import load_dotenv
+import os
 
-# Load environment variables from .env file
-load_dotenv()
+load_dotenv("/home/container/Name-Change-Bot/.env")  # Add full path to the .env file
+
 
 # Use the secret environment variables for the token and database connection
 TOKEN = os.getenv("TOKEN")
