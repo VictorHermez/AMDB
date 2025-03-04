@@ -6,7 +6,7 @@ import mysql.connector
 from dotenv import load_dotenv
 import os
 
-load_dotenv("/home/container/Name-Change-Bot/.env")  # Add full path to the .env file
+load_dotenv("/home/container/Project Freedom Eye/NCB/.env")  # Add full path to the .env file
 
 
 # Use the secret environment variables for the token and database connection
