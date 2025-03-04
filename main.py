@@ -1,22 +1,11 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+from discord.ext import commands
+import json
 import os
-import mysql.connector
-from dotenv import load_dotenv
-import os
 
-load_dotenv("/home/container/Name-Change-Bot/.env")  # Add full path to the .env file
-
-
-# Use the secret environment variables for the token and database connection
-TOKEN = os.getenv("TOKEN")
-DB_HOST = os.getenv("DB_HOST")
-DB_NAME = os.getenv("DB_NAME")
-DB_USER = os.getenv("DB_USER")
-DB_PASS = os.getenv("DB_PASS")
-
-# Setup intents and bot
+# Bot setup with intents
 intents = discord.Intents.default()
 intents.members = True  # Enable the members intent to listen to member updates
 
