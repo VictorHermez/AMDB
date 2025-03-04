@@ -105,7 +105,7 @@ except mysql.connector.Error as e:
     print(f"Error while inserting data into the database: {e}")
 
         # Delete the old message if it exists
-        async for message in channel.history(limit=100):
+    async for message in channel.history(limit=100):
             if message.embeds and message.embeds[0].title == "Name Change Notification" and message.embeds[0].fields[0].value == f"<@{after.id}>":
                 await message.delete()
                 break
