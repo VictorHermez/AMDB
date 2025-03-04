@@ -77,27 +77,33 @@ async def on_member_update(before, after):
         embed.add_field(name="Previous Names", value="\n".join(previous_names[after.id]), inline=False)
         embed.set_thumbnail(url=after.avatar.url if after.avatar else None)
 
-        # Log the name change to the database
-        try:
-            connection = connect_to_database()
-            if connection:
-                cursor = connection.cursor()
-                query = "SELECT COUNT(*) FROM name_changes WHERE user_id = %s AND previous_name = %s"
-                cursor.execute(query, (after.id, before.nick))
-                result = cursor.fetchone()
+       # Database insertion function with correct column names
+try:
+    connection = connect_to_database()
+    if connection:
+        cursor = connection.cursor()
+        query = "SELECT COUNT(*) FROM name_changes WHERE user_id = %s AND old_name = %s"
+        cursor.execute(query, (after.id, before.nick))  # Checking if the name change already exists
+        result = cursor.fetchone()
 
-                if result[0] == 0:  # Avoid inserting duplicates
-                    insert_query = "INSERT INTO name_changes (user_id, previous_name, current_name) VALUES (%s, %s, %s)"
-                    cursor.execute(insert_query, (after.id, before.nick, after.nick))
-                    connection.commit()
-                    print(f"Inserted name change for {after.id}")
-                else:
-                    print(f"Duplicate name change detected for {after.id}")
-                
-                cursor.close()
-                connection.close()
-        except mysql.connector.Error as e:
-            print(f"Error while inserting data into the database: {e}")
+        # Avoid inserting duplicate name changes
+        if result[0] == 0:
+            insert_query = """
+                INSERT INTO name_changes (user_id, old_name, new_name, timestamp)
+                VALUES (%s, %s, %s, NOW())
+            """
+            cursor.execute(insert_query, (after.id, before.nick, after.nick))
+            connection.commit()
+            print(f"Inserted name change for {after.id}")
+        else:
+            print(f"Duplicate name change detected for {after.id}")
+
+        cursor.close()
+        connection.close()
+    else:
+        print("Failed to connect to the database.")
+except mysql.connector.Error as err:
+    print(f"Error while inserting data into the database: {err}")
 
         # Delete the old message if it exists
         async for message in channel.history(limit=100):
