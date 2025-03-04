@@ -1,0 +1,26 @@
+{
+    "users": {
+        "841805438861049857": {
+            "current_name": "INVFED Command",
+            "past_names": [
+                "invfed",
+                "INVFED Command 2",
+                "INVFED Command 233",
+                "INVFED Command 23",
+                "INVFED Command",
+                "INVFED Command 1"
+            ],
+            "message_id": 1342191007353274409
+        },
+        "187397272114298881": {
+            "current_name": "[2\u23d0FADM] Victor_Hermez",
+            "past_names": [
+                "victor_hermez",
+                "[2\u23d0FADM] Victor_Hermez 1"
+            ],
+            "message_id": 1342191008145870898
+        }
+    },
+    "channel_id": 1342116015722725426,
+    "leave_channel_id": 1342116015722725426
+}

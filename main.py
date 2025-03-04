@@ -1,139 +1,138 @@
 import discord
-from discord import app_commands
 from discord.ext import commands
-import json
+from discord import app_commands
+import os
+import mysql.connector
+from dotenv import load_dotenv
 import os
 
-# Bot setup with intents
+load_dotenv("/home/container/Name-Change-Bot/.env")  # Add full path to the .env file
+
+
+# Use the secret environment variables for the token and database connection
+TOKEN = os.getenv("TOKEN")
+DB_HOST = os.getenv("DB_HOST")
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_PASS = os.getenv("DB_PASS")
+
+# Setup intents and bot
 intents = discord.Intents.default()
-intents.members = True
-bot = commands.Bot(command_prefix="!", intents=intents)
+intents.members = True  # Enable the members intent to listen to member updates
 
-# File to store user data and channel info
-DATA_FILE = "bot_data.json"
-CHANNEL_ID = None
+bot = commands.Bot(command_prefix='!', intents=intents)
 
-# Load or initialize data
-def load_data():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            return json.load(f)
-    return {"users": {}, "channel_id": None}
+# Store previous names in a dictionary
+previous_names = {}
 
-# Save data
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=4)
+# MySQL database connection function
+def connect_to_database():
+    try:
+        connection = mysql.connector.connect(
+            host=DB_HOST,
+            database=DB_NAME,
+            user=DB_USER,
+            password=DB_PASS
+        )
+        return connection
+    except mysql.connector.Error as err:
+        print(f"Error: {err}")
+        return None
 
-# Create or update an embed for a user
-async def update_user_embed(channel, user_id, current_name, past_names, message_id=None):
-    embed = discord.Embed(title=f"Name History for {current_name}", color=discord.Color.blue())
-    embed.add_field(name="User ID", value=user_id, inline=False)
-    embed.add_field(name="Current Name", value=current_name, inline=False)
-    embed.add_field(name="Past Names", value=", ".join(past_names) if past_names else "None", inline=False)
-    
-    if message_id:
-        try:
-            msg = await channel.fetch_message(message_id)
-            await msg.edit(embed=embed)
-            return message_id
-        except discord.NotFound:
-            pass
-    
-    msg = await channel.send(embed=embed)
-    return msg.id
+# Log the name change to the database
+async def log_name_change(after, before):
+    try:
+        connection = connect_to_database()
+        if connection:
+            cursor = connection.cursor()
+            query = "SELECT COUNT(*) FROM name_changes WHERE user_id = %s AND old_name = %s"
+            cursor.execute(query, (after.id, before.nick))
+            result = cursor.fetchone()
 
-# On bot startup
+            if result[0] == 0:  # Avoid inserting duplicates
+                insert_query = "INSERT INTO name_changes (user_id, old_name, new_name) VALUES (%s, %s, %s)"
+                cursor.execute(insert_query, (after.id, before.nick, after.nick))
+                connection.commit()
+                print(f"Inserted name change for {after.id}")
+            else:
+                print(f"Duplicate name change detected for {after.id}")
+
+            cursor.close()
+            connection.close()
+    except mysql.connector.Error as e:
+        print(f"Error while inserting data into the database: {e}")
+
 @bot.event
 async def on_ready():
-    global CHANNEL_ID
-    print(f"Logged in as {bot.user}")
-    data = load_data()
-    CHANNEL_ID = data["channel_id"]
+    await bot.change_presence(status=discord.Status.invisible)  # Set bot as offline
+    print(f'Logged in as {bot.user} (ID: {bot.user.id})')
+    print(f'Bot is in guilds: {[guild.name for guild in bot.guilds]}')
 
-    if CHANNEL_ID:
-        channel = bot.get_channel(CHANNEL_ID)
-        if not channel:
-            print("Stored channel not found!")
-            return
-
+    # Sync commands globally
     try:
-        synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} command(s)")
-    except Exception as e:
-        print(f"Failed to sync commands: {e}")
+        await bot.tree.sync()
+        synced_commands = bot.tree.get_commands()
+        print(f'Synced {len(synced_commands)} command(s) globally.')
 
-# Track name changes
+        # Log the names of synced commands
+        for command in synced_commands:
+            print(f'Synced command: {command.name}')
+    except Exception as e:
+        print(f'Error syncing commands: {e}')
+
+
 @bot.event
 async def on_member_update(before, after):
-    if before.nick == after.nick and before.name == after.name:
-        return
+    # Check if the nickname has changed
+    if before.nick != after.nick:
+        channel = discord.utils.get(after.guild.text_channels, name='invfed-bot-testing')
+        if channel is None:
+            print("Channel 'invfed-bot-testing' not found.")
+            return
 
-    if not CHANNEL_ID:
-        return
+        # Prepare the embed message
+        embed = discord.Embed(title="Name Change Notification", color=discord.Color.blue())
+        embed.add_field(name="Discord ID", value=f"<@{after.id}>", inline=False)
+        embed.add_field(name="Current Username", value=after.name, inline=False)
 
-    data = load_data()
-    user_data = data["users"]
-    user_id = str(before.id)
+        # Update previous names
+        if after.id in previous_names:
+            previous_names[after.id].append(before.nick)
+        else:
+            previous_names[after.id] = [before.nick] if before.nick else []
 
-    if user_id not in user_data:
-        user_data[user_id] = {"current_name": before.name, "past_names": [], "message_id": None}
-    
-    old_name = before.name
-    new_name = after.name
-    if old_name != new_name:
-        if "past_names" not in user_data[user_id]:
-            user_data[user_id]["past_names"] = []
-        if old_name not in user_data[user_id]["past_names"]:
-            user_data[user_id]["past_names"].append(old_name)
-        user_data[user_id]["current_name"] = new_name
+        embed.add_field(name="Previous Names", value="\n".join(previous_names[after.id]), inline=False)
+        embed.set_thumbnail(url=after.avatar.url if after.avatar else None)
 
-        channel = bot.get_channel(CHANNEL_ID)
-        if channel:
-            message_id = user_data[user_id]["message_id"]
-            new_message_id = await update_user_embed(
-                channel,
-                user_id,
-                new_name,
-                user_data[user_id]["past_names"],
-                message_id
-            )
-            user_data[user_id]["message_id"] = new_message_id
+        # Log the name change to the database
+        await log_name_change(after, before)
 
-    data["users"] = user_data
-    save_data(data)
+        # Delete the old message if it exists
+        async for message in channel.history(limit=100):
+            if message.embeds and message.embeds[0].title == "Name Change Notification" and message.embeds[0].fields[0].value == f"<@{after.id}>":
+                await message.delete()
+                break
 
-# Slash command to set the channel
-@app_commands.command(name="setchannel", description="Set the channel for name history embeds")
-@app_commands.checks.has_permissions(administrator=True)
-async def set_channel(interaction: discord.Interaction, channel: discord.TextChannel):
-    global CHANNEL_ID
-    data = load_data()
-    
-    CHANNEL_ID = channel.id
-    data["channel_id"] = CHANNEL_ID
-    
-    user_data = data["users"]
-    for user_id, info in user_data.items():
-        message_id = await update_user_embed(
-            channel,
-            user_id,
-            info["current_name"],
-            info["past_names"],
-            None
-        )
-        user_data[user_id]["message_id"] = message_id
-    
-    data["users"] = user_data
-    save_data(data)
-    await interaction.response.send_message(f"Name history embeds will now appear in {channel.mention}", ephemeral=True)
+        await channel.send(embed=embed)
 
-@set_channel.error
-async def set_channel_error(interaction: discord.Interaction, error):
-    if isinstance(error, app_commands.MissingPermissions):
-        await interaction.response.send_message("You need administrator permissions to use this command!", ephemeral=True)
+
+@bot.tree.command(name="setnamechange", description="Set the channel for name change notifications.")
+@app_commands.describe(channel="The channel for notifications")
+async def set_name_change(interaction: discord.Interaction, channel: discord.TextChannel):
+    global notification_channel
+    notification_channel = channel
+    await interaction.response.send_message(f"Name change notifications will be sent to {channel.mention}.", ephemeral=True)
+
+
+@bot.tree.command(name="checknamechanges", description="Check all name changes for a user.")
+@app_commands.describe(member="The member to check")
+async def check_name_changes(interaction: discord.Interaction, member: discord.Member):
+    if member.id in previous_names:
+        name_changes = "\n".join(previous_names[member.id])
+        await interaction.response.send_message(f"Previous names for {member.mention}:\n{name_changes}", ephemeral=True)
     else:
-        await interaction.response.send_message("An error occurred. Please try again.", ephemeral=True)
+        await interaction.response.send_message(f"No previous names found for {member.mention}.", ephemeral=True)
 
-# Run the bot with token from environment variable
-bot.run(os.getenv("TOKEN"))
+
+# Start the bot
+bot.run(TOKEN)
